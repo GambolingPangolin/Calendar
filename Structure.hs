@@ -4,10 +4,10 @@
 
 module Structure (
   Entry(..)
-  , Date(..)
   , Time(..)
   , Repeat(..)
-  , repeating
+  , today
+  , isRepeating
   ) where
 
 import Control.Monad (liftM)
@@ -15,7 +15,7 @@ import Data.Function ((&))
 import Data.List (intercalate, concat)
 import Data.Maybe (isJust, maybe)
 import Data.Time.Clock (getCurrentTime, utctDay)
-import Data.Time.Calendar (toGregorian)
+import Data.Time.Calendar (Day, showGregorian)
 
 -- Preferred syntax for reverse function application
 (|>) = (&)
@@ -25,15 +25,19 @@ import Data.Time.Calendar (toGregorian)
 
 -}
 data Entry = Entry
-  { startDate :: Date
+  { startDate :: Day
   , startTime :: Maybe Time
-  , endDate :: Maybe Date
+  , endDate :: Maybe Day
   , endTime :: Maybe Time
   , body :: String
   , note :: Maybe String
   , rep :: Maybe Repeat
   , subEntries :: [Entry]
   } deriving Eq
+
+instance Ord Entry where
+  e1 <= e2 =
+    startDate e1 <= (startDate e2)
 
 instance Show Entry where
   show e =
@@ -50,9 +54,9 @@ instance Show Entry where
                '\t' : intercalate "\t" (map show $ subEntries e)
 
     in
-    [ [show (startDate e)]
+    [ [showGregorian (startDate e)]
     , mss (startTime e)
-    , mss (endDate e)
+    , maybe [] (return . showGregorian) (endDate e) 
     , mss (endTime e)
     , [body e]
     , maybe [] (\ s -> ['(' : (s ++ ")")]) $ note e
@@ -63,34 +67,12 @@ instance Show Entry where
     |> flip (++) "\n"
     |> flip (++) se 
 
-{-| We store dates as a record containing the month, day, and year.
- 
- -}
-data Date = Date
-  { month :: Int
-  , day :: Int
-  , year :: Int 
-  } deriving Eq
-
-instance Ord Date where
-  d1 <= d2 = 
-    year d1 < year d2
-    || (year d1 == year d2 && month d1 < month d2)
-    || (year d1 == year d2 && month d1 == month d2 && day d1 <= day d2)
-
-instance Show Date where
-  show d =
-    intercalate "-" (map show [month d, day d, year d])
-
-{-| Get the current date, formatted as a Date
+{-| Get the current date, formatted as a Day
 
  -}
-today :: IO Date
+today :: IO Day
 today =
-  let
-    fromTuple (y,m,d) = Date m d (fromInteger y)
-  in
-  liftM (fromTuple . toGregorian . utctDay) getCurrentTime
+  liftM utctDay getCurrentTime
 
 {-| We represent times as records containing an hour and a minute where the hour is 1 through 24.
 
@@ -107,7 +89,7 @@ instance Ord Time where
 
 instance Show Time where
   show t =
-    show (hour t) ++ ":" ++ (show $ minute t) 
+    show' (hour t) ++ ":" ++ (show' $ minute t) 
 
 {-| An event can repeat daily, weekly or monthly.
  -  TODO: Add a constructor for more complex repetition.
@@ -116,7 +98,6 @@ instance Show Time where
 data Repeat = 
   Daily 
   | Weekly 
-  | Monthly 
   | Yearly
   deriving Eq
 
@@ -125,11 +106,18 @@ instance Show Repeat where
     case r of 
       Daily   -> "^d"
       Weekly  -> "^w"
-      Monthly -> "^m"
       Yearly  -> "^y"
 
 {-| Check if an entry has a set repeat.
 
 -}
-repeating :: Entry -> Bool
-repeating = isJust . rep
+isRepeating :: Entry -> Bool
+isRepeating = isJust . rep
+
+-- If the Int is less than 10, add a leading zero
+show' :: Int -> String
+show' i
+  | 0 <= i && i < 10 = '0' : show i
+  | otherwise        = show i
+
+
