@@ -121,7 +121,7 @@ entry n =
     onlySpaces = many $ char ' '
     tryMaybe   = optionMaybe . try
     bodyParser = intercalate " " <$> endBy (many1 $ noneOf " \n\r^(") onlySpaces
-    subEntries = newline >> many (entry (n+1))
+    subEntries = newline >> many (try $ entry (n+1))
     
   in
   count n (char '\t')
@@ -133,7 +133,7 @@ entry n =
     <*> (onlySpaces >> bodyParser)
     <*> tryMaybe (onlySpaces >> parseNote)
     <*> tryMaybe (onlySpaces >> repetition)
-    <*> (try subEntries <|> return [])
+    <*> subEntries
 
 -- HELPERS
 
